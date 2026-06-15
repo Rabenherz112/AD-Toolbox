@@ -1,0 +1,3 @@
+# Generated reports, logs, and saved runs
+output/*
+!output/.gitkeep
