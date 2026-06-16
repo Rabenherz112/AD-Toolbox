@@ -1,0 +1,9 @@
+{
+    "OutputPath": "./output",
+    "Thresholds": {
+        "DiskFreePercentWarn": 15,
+        "DiskFreePercentCrit": 7,
+        "DiskFreeMBWarn": 5120,
+        "DiskFreeMBCrit": 2048
+    }
+}

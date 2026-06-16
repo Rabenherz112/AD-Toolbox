@@ -52,7 +52,26 @@ $root = $PSScriptRoot
 # Load engine
 Get-ChildItem -Path (Join-Path $root 'lib') -Filter '*.ps1' -File | ForEach-Object { . $_.FullName }
 
+# Load config
+$config = $null
+$cfgPath = Join-Path $root 'config\settings.json'
+try { if (Test-Path $cfgPath) { $config = Get-Content $cfgPath -Raw | ConvertFrom-Json } } catch { }
+if (-not $config) { $config = [pscustomobject]@{} }
+
+if (-not $OutputPath) {
+    $OutputPath = if ($config.PSObject.Properties['OutputPath'] -and $config.OutputPath) {
+        $p = $config.OutputPath
+        if ($p -like '.*') { Join-Path $root ($p -replace '^[./\\]+','') } else { $p }
+    } else { Join-Path $root 'output' }
+}
+
+# Initialize logging
+Initialize-ADTLog -OutputPath $OutputPath -Quiet:$Quiet | Out-Null
+Write-ADTLog -Level Info -Message "AD-Toolbox starting (PS $($PSVersionTable.PSVersion))"
+
+# Probe tooling
+$tools = Get-ADTTools
+Write-ADTLog -Level Debug -Message "Tooling available: $(($tools.Keys -join ', '))"
+
 #endregion Initialization
 
-Initialize-ADTLog -OutputPath (Join-Path $root 'output') -Quiet:$Quiet | Out-Null
-Write-ADTLog -Level Info -Message "AD-Toolbox starting (PS $($PSVersionTable.PSVersion))"
