@@ -33,21 +33,30 @@ function Get-ADTTools {
     # Are we running on a DC? (ProductType 2 = domain controller)
     $tools['IsOnDC'] = $false
     try {
-        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
-        $tools['IsOnDC'] = ($os.ProductType -eq 2)
-    } catch {
-        try { $tools['IsOnDC'] = ((Get-WmiObject Win32_OperatingSystem).ProductType -eq 2) } catch { }
-    }
+        $tools['IsOnDC'] = ((Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop).ProductType -eq 2)
+    } catch { }
 
     # Is this device joined to an AD domain?
+    # PartOfDomain is also true for Azure AD-joined; DomainRole 4/5 = DC, 1/3 = domain member
     $tools['DomainJoined'] = $false
     try {
         $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
-        # PartOfDomain is also true for Azure AD-joined; DomainRole 4/5 = DC, 1/3 = domain member
-        $tools['DomainJoined'] = [bool]$cs.PartOfDomain -and ($cs.DomainRole -ge 1)
-    } catch {
-        try { $tools['DomainJoined'] = [bool]((Get-WmiObject Win32_ComputerSystem).PartOfDomain) } catch { }
-    }
+        $tools['DomainJoined'] = ([bool]$cs.PartOfDomain -and ($cs.DomainRole -ge 1))
+    } catch { }
 
     return $tools
+}
+
+function Test-ADTRequires {
+    <# True if all of a module's declared prerequisites are present #>
+    [CmdletBinding()]
+    param(
+        [string[]]$Requires,
+        [hashtable]$Tools
+    )
+    if (-not $Requires) { return $true }
+    foreach ($r in $Requires) {
+        if (-not $Tools.Contains($r) -or -not $Tools[$r]) { return $false }
+    }
+    return $true
 }

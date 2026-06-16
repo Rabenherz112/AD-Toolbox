@@ -23,6 +23,9 @@
 param(
     [switch]$FullTest,
     [string[]]$Run,
+    [string[]]$Area,
+    [switch]$List,
+    [switch]$ReadOnly,
 
     [string]$Server,
     [string]$Domain,
@@ -73,5 +76,27 @@ Write-ADTLog -Level Info -Message "AD-Toolbox starting (PS $($PSVersionTable.PSV
 $tools = Get-ADTTools
 Write-ADTLog -Level Debug -Message "Tooling available: $(($tools.Keys -join ', '))"
 
-#endregion Initialization
+# Get context of the domain
+$ctx = Initialize-ADTContext -Config $config -Tools $tools -Server $Server -Domain $Domain `
+        -Credential $Credential -TestCredential $TestCredential -ScanForest:$Forest -WhatIf:$WhatIf
+if ($ctx.ScanForest) { Write-ADTLog -Level Info -Message "Forest scan: $(@($ctx.Domains).Count) domain(s), $(@($ctx.DomainControllers).Count) DC(s)." }
 
+#endregion Initialization
+#region Main Execution
+
+# Require a usable AD domain context
+# Everything below this point cannot work without a domain context, so continuing would be pointless
+if (-not $ctx.Domain) {
+    Write-ADTLog -Level Error -Message 'No Active Directory domain context could be established.'
+    if (-not $tools['DomainJoined']) {
+        Write-ADTLog -Level Error -Message 'This device is not joined to an AD domain. Run AD-Toolbox on a domain controller, or on a domain-joined admin workstation with RSAT installed.'
+    } else {
+        Write-ADTLog -Level Error -Message "This device is domain-joined but a DC/AD context could not be reached$(if ($ctx.DiscoveryError) { ": $($ctx.DiscoveryError)" } else { '.' })"
+        Write-ADTLog -Level Error -Message 'Check connectivity/DNS to a domain controller, or pass -Server/-Domain (and -Credential if needed).'
+    }
+    exit 3
+}
+
+# ToDo: First check CLI, if not CLI build an interactive menu
+
+#endregion Main Execution

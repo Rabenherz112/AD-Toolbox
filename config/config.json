@@ -1,5 +1,6 @@
 {
     "OutputPath": "./output",
+    "Throttle": 8,
     "Thresholds": {
         "DiskFreePercentWarn": 15,
         "DiskFreePercentCrit": 7,
