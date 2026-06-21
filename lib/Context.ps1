@@ -78,7 +78,17 @@ function Initialize-ADTContext {
 }
 
 function New-ADTDcObject {
-    param([string]$Name, [string]$HostName, [string]$Site, [string]$IPv4, [string]$OS, $IsGC, $IsRODC, [string]$DomainName)
+    param(
+        [string]$Name,
+        [string]$HostName,
+        [string]$Site,
+        [string]$IPv4,
+        [string]$OS,
+        $IsGC,
+        $IsRODC,
+        [string]$DomainName
+    )
+
     [pscustomobject]@{
         Name            = $Name
         HostName        = $HostName
@@ -93,7 +103,12 @@ function New-ADTDcObject {
 }
 
 function Initialize-ADTContextFromModule {
-    param($Context, [string]$Domain, [System.Management.Automation.PSCredential]$Credential, [switch]$ScanForest)
+    param(
+        $Context,
+        [string]$Domain,
+        [System.Management.Automation.PSCredential]$Credential,
+        [switch]$ScanForest
+    )
 
     $common = @{}
     if ($Credential) { $common['Credential'] = $Credential }
@@ -139,7 +154,10 @@ function Initialize-ADTContextFromModule {
 }
 
 function Initialize-ADTContextFromDotNet {
-    param($Context, [switch]$ScanForest)
+    param(
+        $Context,
+        [switch]$ScanForest
+    )
 
     $dom    = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
     $forest = $dom.Forest

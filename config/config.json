@@ -6,5 +6,6 @@
         "DiskFreePercentCrit": 7,
         "DiskFreeMBWarn": 5120,
         "DiskFreeMBCrit": 2048
-    }
+    },
+    "ExcludeModules": []
 }

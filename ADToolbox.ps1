@@ -81,8 +81,23 @@ $ctx = Initialize-ADTContext -Config $config -Tools $tools -Server $Server -Doma
         -Credential $Credential -TestCredential $TestCredential -ScanForest:$Forest -WhatIf:$WhatIf
 if ($ctx.ScanForest) { Write-ADTLog -Level Info -Message "Forest scan: $(@($ctx.Domains).Count) domain(s), $(@($ctx.DomainControllers).Count) DC(s)." }
 
+# Discover modules
+$registry = Get-ADTModuleRegistry -Root $root
+if ($config.PSObject.Properties['ExcludeModules'] -and $config.ExcludeModules) {
+    $registry = $registry | Where-Object { $_.Id -notin $config.ExcludeModules }
+}
+Write-ADTLog -Level Info -Message "Discovered $(@($registry).Count) module(s)."
+Write-ADTLog -Level Debug -Message "Modules: $(@($registry | ForEach-Object { $_.Id }) -join ', ')"
+
 #endregion Initialization
 #region Main Execution
+
+# List modules
+if ($List) {
+    $registry | Sort-Object Kind, Area, Id |
+        Format-Table @{N='Kind';E={$_.Kind}}, @{N='Id';E={$_.Id}}, @{N='Area';E={$_.Area}}, @{N='Risk';E={$_.RiskLevel}}, @{N='Writes';E={$_.Writes}}, @{N='FullTest';E={$_.IncludeInFullTest}}, @{N='Name';E={$_.Name}} -AutoSize | Out-Host
+    exit 0
+}
 
 # Require a usable AD domain context
 # Everything below this point cannot work without a domain context, so continuing would be pointless
