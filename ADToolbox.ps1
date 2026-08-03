@@ -112,6 +112,23 @@ if (-not $ctx.Domain) {
     exit 3
 }
 
+# CLI Mode
+# Normalize list args: allow both real arrays and a single comma-joined string
+if ($Run)  { $Run  = @($Run  | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+if ($Area) { $Area = @($Area | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+
+$selected = @()
+if ($FullTest) { $selected += Select-ADTFullTestModules -Registry $registry -ReadOnly:$ReadOnly }
+if ($Area)     { $selected += $registry | Where-Object { $_.Kind -eq 'Diagnostic' -and $_.Area -in $Area } }
+if ($Run)      { $selected += $registry | Where-Object { $_.Id -in $Run } }
+$selected = @($selected | Sort-Object Id -Unique)
+
+if ($selected.Count -eq 0) {
+    Write-ADTLog -Level Warn -Message "No modules matched the selection."
+    exit 3
+}
+Write-ADTLog -Level Info -Message "Running $($selected.Count) module(s) in CLI mode."
+
 # ToDo: First check CLI, if not CLI build an interactive menu
 
 #endregion Main Execution

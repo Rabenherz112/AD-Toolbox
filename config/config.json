@@ -7,5 +7,6 @@
         "DiskFreeMBWarn": 5120,
         "DiskFreeMBCrit": 2048
     },
+    "CanaryContainer": null,
     "ExcludeModules": []
 }
