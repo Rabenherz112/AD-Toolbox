@@ -112,6 +112,14 @@ if (-not $ctx.Domain) {
     exit 3
 }
 
+# Interactive Mode
+$cliMode = $FullTest -or $Run -or $Area
+
+if (-not $cliMode) {
+    Show-ADTMenu -Context $ctx -Registry $registry -OutputPath $OutputPath
+    exit 0
+}
+
 # CLI Mode
 # Normalize list args: allow both real arrays and a single comma-joined string
 if ($Run)  { $Run  = @($Run  | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
@@ -128,7 +136,5 @@ if ($selected.Count -eq 0) {
     exit 3
 }
 Write-ADTLog -Level Info -Message "Running $($selected.Count) module(s) in CLI mode."
-
-# ToDo: First check CLI, if not CLI build an interactive menu
 
 #endregion Main Execution
