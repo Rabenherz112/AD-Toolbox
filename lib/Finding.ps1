@@ -100,3 +100,31 @@ function New-ADTFinding {
         Timestamp   = (Get-Date)
     }
 }
+
+function Get-ADTWorstSeverity {
+    <# Return the worst severity string across a set of findings. #>
+    [CmdletBinding()]
+    param([Parameter(ValueFromPipeline)]$Findings)
+    begin { $worst = -1; $name = 'OK' }
+    process {
+        foreach ($f in $Findings) {
+            if ($null -eq $f) { continue }
+            $r = if ($f.PSObject.Properties['Rank']) { [int]$f.Rank } else { Get-ADTSeverityRank -Severity $f.Severity }
+            if ($r -gt $worst) { $worst = $r; $name = $f.Severity }
+        }
+    }
+    end { if ($worst -lt 0) { 'OK' } else { $name } }
+}
+
+function Get-ADTExitCode {
+    <# Map the worst finding severity to a process exit code for unattended use. #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Findings)
+    $rank = (Get-ADTSeverityRank -Severity (Get-ADTWorstSeverity -Findings $Findings))
+    switch ($rank) {
+        { $_ -le 1 } { return 0 }   # OK / Info
+        { $_ -le 3 } { return 1 }   # Low / Medium
+        { $_ -le 5 } { return 2 }   # High / Critical
+        default      { return 3 }   # Error
+    }
+}

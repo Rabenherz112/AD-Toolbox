@@ -137,4 +137,13 @@ if ($selected.Count -eq 0) {
 }
 Write-ADTLog -Level Info -Message "Running $($selected.Count) module(s) in CLI mode."
 
+$findings = @()
+foreach ($m in $selected) {
+    $tgt = if ($m.Kind -ne 'Diagnostic' -and $Server) { $Server } else { $null }
+    $findings += Invoke-ADTModule -Module $m -Context $ctx -Target $tgt `
+                    -Force:$Force -IUnderstand:$IUnderstand -ConfirmDisabled:$NoConfirm
+}
+
 #endregion Main Execution
+
+exit (Get-ADTExitCode -Findings $findings)
