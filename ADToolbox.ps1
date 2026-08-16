@@ -137,11 +137,25 @@ if ($selected.Count -eq 0) {
 }
 Write-ADTLog -Level Info -Message "Running $($selected.Count) module(s) in CLI mode."
 
+# Run modules
 $findings = @()
 foreach ($m in $selected) {
     $tgt = if ($m.Kind -ne 'Diagnostic' -and $Server) { $Server } else { $null }
     $findings += Invoke-ADTModule -Module $m -Context $ctx -Target $tgt `
                     -Force:$Force -IUnderstand:$IUnderstand -ConfirmDisabled:$NoConfirm
+}
+
+# Compare to baseline
+$drift = $null
+if ($CompareTo) {
+    try { $drift = Compare-ADTRun -Current $findings -BaselinePath $CompareTo }
+    catch { Write-ADTLog -Level Warn -Message "Drift compare failed: $($_.Exception.Message)" }
+}
+
+# Export report
+Export-ADTReport -Findings $findings -Context $ctx -Drift $drift -Format $Format -OutputPath $OutputPath | Out-Null
+if ($SaveRun) { 
+    Save-ADTRun -Findings $findings -Context $ctx -OutputPath $OutputPath | Out-Null
 }
 
 #endregion Main Execution

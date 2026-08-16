@@ -128,3 +128,26 @@ function Get-ADTExitCode {
         default      { return 3 }   # Error
     }
 }
+
+function Get-ADTScorecard {
+    <#
+        Rebuild the cross-DC view at report time by grouping findings by Target.
+        Returns one row per target with its worst severity and a severity breakdown
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Findings)
+
+    $Findings | Group-Object -Property Target | ForEach-Object {
+        $items = $_.Group
+        [pscustomobject]@{
+            Target   = $_.Name
+            Status   = (Get-ADTWorstSeverity -Findings $items)
+            Critical = @($items | Where-Object Severity -eq 'Critical').Count
+            High     = @($items | Where-Object Severity -eq 'High').Count
+            Medium   = @($items | Where-Object Severity -eq 'Medium').Count
+            Low      = @($items | Where-Object Severity -eq 'Low').Count
+            Issues   = @($items | Where-Object { $_.Rank -ge 2 }).Count
+            Findings = $items
+        }
+    } | Sort-Object -Property @{ Expression = { Get-ADTSeverityRank -Severity $_.Status }; Descending = $true }, Target
+}
