@@ -3,8 +3,9 @@
     Diagnostic: DNS Zone Synchronization
 
     Compares the zone inventory across every DC DNS server to catch DNS sync problems:
-        * A zone present on some DNS servers but missing on others (replication-scope or not-converged)
-        * A Primary zone that is NOT AD-integrated (so it does not replicate via AD at all)
+        * An AD-INTEGRATED zone present on some DNS servers but missing on others (replication-scope or not-converged)
+        * A local file-based primary zone, which does not replicate via AD at all
+        * The same zone name served AD-integrated on some servers and file-based on others
         * Replication-scope mismatches for the same zone
 #>
 @{
@@ -46,27 +47,45 @@
             $present = @($servers | Where-Object { $_.Zones.ZoneName -contains $zn })
             $missing = @($servers | Where-Object { $_.Zones.ZoneName -notcontains $zn })
 
-            # Present on some but not all DNS servers -> replication-scope or convergence problem
-            if ($missing.Count -gt 0) {
+            # Inspect the zone instances that DO exist, keeping the DC each one came from
+            $instances = foreach ($s in $present) {
+                [pscustomobject]@{ DC = $s.DC; Zone = ($s.Zones | Where-Object ZoneName -eq $zn | Select-Object -First 1) }
+            }
+            $dsInst   = @($instances | Where-Object { $_.Zone.IsDsIntegrated })
+            $fileInst = @($instances | Where-Object { -not $_.Zone.IsDsIntegrated })
+
+            # Classify the zone BEFORE judging its absence elsewhere
+            if ($fileInst.Count -gt 0 -and $dsInst.Count -eq 0) {
+                $hosts = (@($fileInst.DC) -join ', ')
+                $copies = if ($fileInst.Count -gt 1) { " Each hosting server keeps its own independent copy, so they drift apart silently." } else { '' }
+                $findings += New-ADTFinding -Severity Medium -Area DNS -Target $zn `
+                    -Title "Zone '$zn' is a local file-based zone on $hosts" `
+                    -Evidence ("Hosted on: $hosts | Not present on: " + (@($missing.DC) -join ', ') + ' (expected for a local zone)') `
+                    -RootCause 'This is a standard (file-based) primary stored on the hosting server''s disk instead of in AD, so it exists only where it is hosted. Its absence on the other DNS servers is expected and is NOT an AD replication failure.' `
+                    -Impact ('The zone does not replicate: it is a single point of failure, clients querying any other DNS server cannot resolve the namespace, and it cannot enforce secure dynamic updates.' + $copies) `
+                    -Remediation 'Convert the zone to AD-integrated so it replicates with AD and can enforce secure dynamic updates. If it is deliberately local, confirm that only clients pointed at the hosting server need it.'
+            }
+            elseif ($fileInst.Count -gt 0) {
+                # same zone name served from AD on some servers and from a local file on others
+                $findings += New-ADTFinding -Severity High -Area DNS -Target $zn `
+                    -Title "Zone '$zn' exists as both an AD-integrated and a file-based primary" `
+                    -Evidence ('AD-integrated on: ' + (@($dsInst.DC) -join ', ') + ' | file-based on: ' + (@($fileInst.DC) -join ', ')) `
+                    -RootCause 'The same zone name is served from AD on some DNS servers and from a local zone file on others. The two copies are unrelated and diverge silently.' `
+                    -Impact 'Resolution depends on which DNS server a client happens to ask, and updates written to one copy never reach the other.' `
+                    -Remediation 'Decide which copy is authoritative, delete the other, and keep the zone AD-integrated.'
+            }
+            # All instances AD-integrated: now absence elsewhere really does mean replication/scope
+            elseif ($missing.Count -gt 0) {
                 $findings += New-ADTFinding -Severity High -Area DNS -Target $zn `
                     -Title "Zone '$zn' is missing on $($missing.Count) of $($servers.Count) DNS server(s)" `
                     -Evidence ("Present: " + (@($present.DC) -join ', ') + " | Missing: " + (@($missing.DC) -join ', ')) `
-                    -RootCause 'The zone exists on some DNS servers but not others - AD replication of the zone partition has not converged, or the zone replication scope excludes those DCs.' `
+                    -RootCause 'The zone is AD-integrated and exists on some DNS servers but not others - AD replication of the zone partition has not converged, or the zone replication scope excludes those DCs.' `
                     -Impact 'Clients using a DNS server that lacks the zone get resolution failures for that namespace.' `
                     -Remediation @{ Text='Confirm the zone is AD-integrated with the right replication scope (Forest/Domain), then let AD replication converge or force it.'; ActionId='force-replication' }
             }
 
-            # Inspect the zone instances that DO exist
-            $instances = foreach ($s in $present) { $s.Zones | Where-Object ZoneName -eq $zn | Select-Object -First 1 }
-            $notDs = @($instances | Where-Object { -not $_.IsDsIntegrated })
-            if ($notDs.Count -gt 0) {
-                $findings += New-ADTFinding -Severity Medium -Area DNS -Target $zn `
-                    -Title "Zone '$zn' is a file-based primary (not AD-integrated)" `
-                    -RootCause 'A standard (file-based) primary zone does not replicate through AD - it is a single point of failure and will not stay in sync across DCs.' `
-                    -Impact 'If that DNS server is lost the zone is lost; other DCs never receive updates.' `
-                    -Remediation 'Convert the zone to an AD-integrated zone so it replicates with AD.'
-            }
-            $scopes = @($instances | ForEach-Object { [string]$_.ReplicationScope } | Sort-Object -Unique)
+            # Replication scope is an AD-integrated concept, so only compare those instances
+            $scopes = @($dsInst | ForEach-Object { [string]$_.Zone.ReplicationScope } | Sort-Object -Unique)
             if ($scopes.Count -gt 1) {
                 $findings += New-ADTFinding -Severity Medium -Area DNS -Target $zn `
                     -Title "Zone '$zn' has inconsistent replication scope across DNS servers" -Evidence ($scopes -join ', ') `
