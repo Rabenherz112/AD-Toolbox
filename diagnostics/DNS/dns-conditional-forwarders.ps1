@@ -113,9 +113,7 @@
                 -Evidence (@($checkedDCs) -join ', ')))
         }
 
-        # A DC that is dead for EVERY zone it forwards is one broken DC, not one broken zone per
-        # namespace. Report at the level of the cause: collapse those into a single per-DC finding
-        # and take that DC out of the per-zone view, so genuinely zone-specific faults stay visible
+        # A DC that is dead for EVERY zone it forwards is one broken DC
         $heldZonesByDC = @{}   # DC -> zones it forwards (that have targets configured)
         $deadZonesByDC = @{}   # DC -> those zones where every target failed
         foreach ($name in $zoneByName.Keys) {
@@ -130,7 +128,7 @@
                 }
             }
         }
-        # Needs at least two zones to be a pattern - a DC with one dead zone is just a dead zone
+        # Needs at least two zones to be a pattern
         $collapsedDCs = @($heldZonesByDC.Keys | Where-Object {
             $heldZonesByDC[$_].Count -ge 2 -and
             $deadZonesByDC.ContainsKey($_) -and
