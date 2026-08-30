@@ -6,6 +6,9 @@
     and the engine can skip/flag them if a prerequisite is missing rather than crashing
 #>
 
+# PowerShell modules a diagnostic may declare in Requires. Probed by Get-ADTTools and imported centrally by Invoke-ADTModule
+$script:ADTPsModules = @('ActiveDirectory','DnsServer','GroupPolicy')
+
 function Get-ADTTools {
     [CmdletBinding()]
     param()
@@ -18,7 +21,7 @@ function Get-ADTTools {
     }
 
     # PowerShell modules (RSAT)
-    foreach ($m in 'ActiveDirectory','DnsServer','GroupPolicy') {
+    foreach ($m in $script:ADTPsModules) {
         $tools[$m] = [bool](Get-Command -Module $m -ErrorAction SilentlyContinue) -or [bool](Get-Module -ListAvailable -Name $m -ErrorAction SilentlyContinue)
     }
 

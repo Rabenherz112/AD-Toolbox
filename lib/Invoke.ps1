@@ -32,7 +32,7 @@ function Invoke-ADTModule {
 
     # Load any required PowerShell (RSAT) modules centrally, so individual modules never need to Import-Module themselves. Availability was just verified by Test-ADTRequires above; PowerShell would also auto-load on first cmdlet use
     foreach ($req in @($Module.Requires)) {
-        if ($req -in @('ActiveDirectory','DnsServer','GroupPolicy') -and -not (Get-Module -Name $req)) {
+        if ($req -in $script:ADTPsModules -and -not (Get-Module -Name $req)) {
             try { Import-Module $req -ErrorAction Stop } catch { }
         }
     }
