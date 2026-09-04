@@ -86,7 +86,8 @@ function New-ADTDcObject {
         [string]$OS,
         $IsGC,
         $IsRODC,
-        [string]$DomainName
+        [string]$DomainName,
+        [string]$ObjectGuid
     )
 
     [pscustomobject]@{
@@ -98,6 +99,7 @@ function New-ADTDcObject {
         IsGlobalCatalog = $IsGC
         IsRODC          = $IsRODC
         Domain          = $DomainName
+        ObjectGuid      = $ObjectGuid
         IsReachable     = $null
     }
 }
@@ -142,7 +144,8 @@ function Initialize-ADTContextFromModule {
             $dcParams = @{ Filter = '*'; Server = $d } + $common
             foreach ($dc in (Get-ADDomainController @dcParams -ErrorAction Stop)) {
                 $dcs += New-ADTDcObject -Name $dc.Name -HostName $dc.HostName -Site $dc.Site -IPv4 $dc.IPv4Address `
-                        -OS $dc.OperatingSystem -IsGC $dc.IsGlobalCatalog -IsRODC $dc.IsReadOnly -DomainName $d
+                        -OS $dc.OperatingSystem -IsGC $dc.IsGlobalCatalog -IsRODC $dc.IsReadOnly -DomainName $d `
+                        -ObjectGuid $(if ($dc.ObjectGUID) { $dc.ObjectGUID.Guid } else { $null })
             }
         } catch {
             Write-ADTLog -Level Warn -Message "Could not enumerate DCs for domain '$d': $($_.Exception.Message)"
@@ -191,4 +194,50 @@ function Initialize-ADTContextFromDotNet {
     $Context.DomainControllers = $dcs
     $Context.Sites = @($dcs | Select-Object -ExpandProperty Site -Unique)
     return $Context
+}
+
+function Get-ADTDomainControllerSet {
+    <# Get the DC set of ONE domain, plus whether that set is known to be complete #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Context,
+        [string]$Domain
+    )
+
+    if (-not $Domain) { $Domain = $Context.Domain }
+
+    # A fresh enumeration is immune to -Server narrowing, so prefer it over the context object
+    if ($Context.HasADModule -and $Domain) {
+        try {
+            Import-Module ActiveDirectory -ErrorAction Stop
+            $params = @{ Filter = '*'; Server = $Domain; ErrorAction = 'Stop' }
+            if ($Context.Credential) { $params['Credential'] = $Context.Credential }
+            $dcs = @(Get-ADDomainController @params | ForEach-Object {
+                New-ADTDcObject -Name $_.Name -HostName $_.HostName -Site $_.Site -IPv4 $_.IPv4Address `
+                    -OS $_.OperatingSystem -IsGC $_.IsGlobalCatalog -IsRODC $_.IsReadOnly -DomainName $Domain `
+                    -ObjectGuid $(if ($_.ObjectGUID) { $_.ObjectGUID.Guid } else { $null })
+            })
+            if ($dcs.Count -gt 0) {
+                return [pscustomobject]@{
+                    DomainControllers = $dcs
+                    IsComplete        = $true
+                    Source            = "Get-ADDomainController -Server $Domain ($($dcs.Count) DC(s))"
+                }
+            }
+        } catch {
+            Write-ADTLog -Level Debug -Message "Could not re-enumerate DCs for '$Domain': $($_.Exception.Message)"
+        }
+    }
+
+    # Fall back to what discovery already found, scoped to this domain. That set is only the whole domain when discovery was not narrowed to a single -Server target
+    $scoped = @($Context.DomainControllers | Where-Object { -not $_.Domain -or $_.Domain -eq $Domain })
+    [pscustomobject]@{
+        DomainControllers = $scoped
+        IsComplete        = (-not $Context.TargetServer)
+        Source            = $(if ($Context.TargetServer) {
+                                "context narrowed to -Server '$($Context.TargetServer)'"
+                            } else {
+                                "$($Context.DiscoveryMethod) discovery ($($scoped.Count) DC(s))"
+                            })
+    }
 }
